@@ -26,19 +26,20 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         throw std::system_error(errno, std::system_category(), "socket creation failed");
     int opt = 1;
     setsockopt(_listen, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
-    sockaddr_in client_addr = {};
-    client_addr.sin_family = AF_INET;
-    client_addr.sin_addr.s_addr = INADDR_ANY;
-    client_addr.sin_port = htons(port);
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
 
-    if(bind(_listen, (sockaddr*)&client_addr, sizeof(client_addr)) < 0)
+    if(bind(_listen, (sockaddr*)&addr, sizeof(addr)) < 0)
         throw std::system_error(errno, std::system_category(), "bind failed");
     listen(_listen, 16);
-    while( _fd < 0){
+    while( _fd <= 0){
         _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
     }
+   std::cout << "[+] Initialized TCP Socket: " << _fd << std::endl;
 }
 
 TcpSocket::~TcpSocket(){
