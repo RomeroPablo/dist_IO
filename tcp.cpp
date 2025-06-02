@@ -21,7 +21,8 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         throw std::system_error(errno, std::system_category(), "connection failed");
 
     } else {
-    if(_listen< 0)
+    _listen = socket(AF_INET, SOCK_STREAM, 0);
+    if(_listen < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
     int opt = 1;
     setsockopt(_listen, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
