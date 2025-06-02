@@ -52,7 +52,7 @@ std::size_t TcpSocket::write(const uint8_t* buf, std::size_t len){
 }
 
 void TcpSocket::reconnect(){
-    while(accept(_fd, nullptr, nullptr) < 0){
+    while(accept(_fd, nullptr, nullptr) <= 0){
         std::cout << "attempting reconnect" << std::endl;
         sleep(1);
     }
