@@ -30,5 +30,5 @@ class TcpSocket {
 
     private:
         int _fd = -1;
-
+        int _listen = -1;
 };

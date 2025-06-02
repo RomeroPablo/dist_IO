@@ -5,11 +5,11 @@
 #include <termios.h>
 
 TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
+   if(serverIP.size() != 0){
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     if(_fd < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
-    
-    if(serverIP.size() != 0){
+
     sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
@@ -19,19 +19,22 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
 
     if(connect(_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
         throw std::system_error(errno, std::system_category(), "connection failed");
-    }
-    else{
+
+    } else {
+    if(_listen< 0)
+        throw std::system_error(errno, std::system_category(), "socket creation failed");
     int opt = 1;
-    setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+    setsockopt(_listen, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
     sockaddr_in client_addr = {};
     client_addr.sin_family = AF_INET;
     client_addr.sin_addr.s_addr = INADDR_ANY;
     client_addr.sin_port = htons(port);
 
-    if(bind(_fd, (sockaddr*)&client_addr, sizeof(client_addr)) < 0)
+    if(bind(_listen, (sockaddr*)&client_addr, sizeof(client_addr)) < 0)
         throw std::system_error(errno, std::system_category(), "bind failed");
-    listen(_fd, 16);
-    while(accept(_fd, nullptr, nullptr) < 0){
+    listen(_listen, 16);
+    while( _fd < 0){
+        _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
     }
