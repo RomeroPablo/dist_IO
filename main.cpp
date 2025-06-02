@@ -10,7 +10,7 @@ void client_t(RingBuffer &ringBuffer){
     std::vector<uint8_t> temp(READ_CHUNK);
     int read_amount = 0;
     int write_amount = 0;
-    while(1){
+    while(true){
         std::cout << "cltA" << std::endl;
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
@@ -27,10 +27,11 @@ void source_t(RingBuffer &ringBuffer){
     std::cout << "source connected" << std::endl;
     std::vector<uint8_t> temp(READ_CHUNK);
     int read_amount = 0;
-    while(1){
+    while(true){
         std::cout << "srcA" << std::endl;
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
+            std::cout << "src rec" << std::endl;
             source_socket.reconnect();
         }
         ringBuffer.write(temp.data(), read_amount);
