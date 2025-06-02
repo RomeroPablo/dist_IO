@@ -16,7 +16,7 @@ void client_t(RingBuffer &ringBuffer){
         write_amount = client_socket.write(temp.data(), read_amount);
         std::cout << "wrote to client socket" << std::endl;
         if(write_amount <= 0){
-            client_socket.reconnect();
+            //client_socket.reconnect();
         }
     }
 }
@@ -31,8 +31,8 @@ void source_t(RingBuffer &ringBuffer){
         std::cout << "srcA" << std::endl;
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
-            std::cout << "src rec" << std::endl;
-            source_socket.reconnect();
+            //std::cout << "src rec" << std::endl;
+            //source_socket.reconnect();
         }
         ringBuffer.write(temp.data(), read_amount);
         std::cout << "source wrote to buffer" << std::endl;
