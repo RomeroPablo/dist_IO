@@ -40,28 +40,43 @@ void tcp_proc(RingBuffer &ringBuffer){
     }
 }
 
-//#define SERIAL
+#define CLIENT_PORT 5700
+void client_t(RingBuffer &ringBuffer){
+    TcpSocket client_socket("", CLIENT_PORT);
+    std::vector<uint8_t> temp(READ_CHUNK);
+    int read_amount = 0;
+    int write_amount = 0;
+    while(1){
+        // read from rb, write to socket
+        read_amount = ringBuffer.read(temp.data(), temp.size());
+        write_amount = client_socket.write(temp.data(), read_amount);
+        if(write_amount <= 0){
+            client_socket.reconnect();
+        }
+    }
+}
+
+#define SOURCE_PORT 5600
+void source_t(RingBuffer &ringBuffer){
+    TcpSocket source_socket("", SOURCE_PORT);
+    std::vector<uint8_t> temp(READ_CHUNK);
+    int read_amount = 0;
+    while(1){
+        read_amount = source_socket.read(temp.data(), temp.size());
+        if(read_amount <= 0){
+            source_socket.reconnect();
+        }
+        ringBuffer.write(temp.data(), read_amount);
+    }
+}
+
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
-    std::string portName = PORT;
-    unsigned baud = 115200;
-    std::string serverIP = IP;
-    unsigned port = 5700;
-
-    SerialPort serial(portName, baud);
-    TcpSocket  tcp(serverIP, port);
     RingBuffer ringBuffer;
 
-    
-#ifdef SERIAL
-    std::thread t_serial_read(serial_read, std::ref(serial), std::ref(ringBuffer));
-    std::thread t_serial_proc(serial_proc, std::ref(ringBuffer));
-    std::cin.get(); // closes on input
-    t_serial_read.join();
-    t_serial_proc.join();
-#else
-    std::thread t_tcp_read(tcp_read, std::ref(tcp), std::ref(ringBuffer));
-    std::thread t_tcp_proc(tcp_proc, std::ref(ringBuffer));
+    std::thread t_source_t(source_t, std::ref(ringBuffer));
+    std::thread t_client_t(client_t, std::ref(ringBuffer));
     std::cin.get();
-#endif
+    t_source_t.join();
+    t_client_t.join();
 }
