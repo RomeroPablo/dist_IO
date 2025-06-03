@@ -20,7 +20,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
 
     if(connect(_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
         throw std::system_error(errno, std::system_category(), "connection failed");
-
+    std::cout << "[+] Initialized TCP Socket = " << _fd << std::endl;
     } else {
         // server side
     _listen = socket(AF_INET, SOCK_STREAM, 0);
@@ -36,12 +36,12 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         throw std::system_error(errno, std::system_category(), "bind failed");
     listen(_listen, 16);
     while( _fd < 0){
-        std::cout << "[!] Searching for connection" << std::endl;
+        std::cout << "[!] Searching for connection on " << _listen << std::endl;
         _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
+    std::cout << " [+] Initialized TCP Socket = " << _listen << std::endl;
     }
-   std::cout << "[+] Initialized TCP Socket, fd = " << _fd << std::endl;
 }
 
 TcpSocket::~TcpSocket(){
