@@ -48,12 +48,12 @@ TcpSocket::~TcpSocket(){
     if(_fd >= 0) ::close(_fd);
 }
 
-std::size_t TcpSocket::read(uint8_t* buf, std::size_t maxlen){
+ssize_t TcpSocket::read(uint8_t* buf, std::size_t maxlen){
     ssize_t n = ::recv(_fd, buf, maxlen, 0);
     return n;
 }
 
-std::size_t TcpSocket::write(const uint8_t* buf, std::size_t len){
+ssize_t TcpSocket::write(const uint8_t* buf, std::size_t len){
     ssize_t n = send(_fd, buf, len, 0);
     return n;
 }

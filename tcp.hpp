@@ -24,8 +24,8 @@ class TcpSocket {
 
         TcpSocket(const TcpSocket&) = delete;
         TcpSocket& operator=(const TcpSocket&) = delete;
-        std::size_t read(uint8_t* buf, std::size_t maxlen);
-        std::size_t write(const uint8_t* buf, std::size_t len);
+        ssize_t read(uint8_t* buf, std::size_t maxlen);
+        ssize_t write(const uint8_t* buf, std::size_t len);
         void reconnect();
 
     private:
