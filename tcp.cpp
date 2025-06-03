@@ -36,8 +36,8 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         throw std::system_error(errno, std::system_category(), "bind failed");
     listen(_listen, 16);
     while( _fd < 0){
+        std::cout << "[!] Searching for connection" << std::endl;
         _fd = accept(_listen, nullptr, nullptr);
-        std::cout << "[!] Searching for Source " << std::endl;
         sleep(1);
     }
     }
