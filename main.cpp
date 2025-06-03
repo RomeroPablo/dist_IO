@@ -13,7 +13,6 @@ void client_t(RingBuffer &ringBuffer){
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
         if(write_amount <= 0){
-            std::cout << "ouch\n";
             client_socket.reconnect();
         }
     }

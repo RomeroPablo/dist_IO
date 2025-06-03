@@ -27,7 +27,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
     if(_listen < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
     int opt = 1;
-    setsockopt(_listen, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+    setsockopt(_listen, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT , &opt, sizeof(opt));
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -54,8 +54,7 @@ ssize_t TcpSocket::read(uint8_t* buf, std::size_t maxlen){
 }
 
 ssize_t TcpSocket::write(const uint8_t* buf, std::size_t len){
-    ssize_t n = send(_fd, buf, len, 0);
-    std::cout << "sent\n";
+    ssize_t n = send(_fd, buf, len, MSG_NOSIGNAL);
     return n;
 }
 
