@@ -6,15 +6,12 @@
 #define CLIENT_PORT 5700
 void client_t(RingBuffer &ringBuffer){
     TcpSocket client_socket("", CLIENT_PORT);
-    std::cout << "client connected" << std::endl;
     std::vector<uint8_t> temp(READ_CHUNK);
     int read_amount = 0;
     int write_amount = 0;
     while(true){
-        std::cout << "cltA" << std::endl;
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
-        std::cout << "wrote to client socket" << std::endl;
         if(write_amount <= 0){
             //client_socket.reconnect();
         }
@@ -24,20 +21,24 @@ void client_t(RingBuffer &ringBuffer){
 #define SOURCE_PORT 5600
 void source_t(RingBuffer &ringBuffer){
     TcpSocket source_socket("", SOURCE_PORT);
-    std::cout << "source connected" << std::endl;
     std::vector<uint8_t> temp(READ_CHUNK);
     int read_amount = 0;
     while(true){
-        std::cout << "srcA" << std::endl;
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
             //std::cout << "src rec" << std::endl;
             //source_socket.reconnect();
         }
         ringBuffer.write(temp.data(), read_amount);
-        std::cout << "source wrote to buffer" << std::endl;
     }
 }
+
+// at the moment:
+// order of launch does not matter :)
+// works, but problems:
+// crashes when client closes connection
+// infinite loop when source closes connection, but then won't crash when client closes after
+// poor serial line output info
 
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
