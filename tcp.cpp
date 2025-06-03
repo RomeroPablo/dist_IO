@@ -37,6 +37,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
     listen(_listen, 16);
     while( _fd < 0){
         _fd = accept(_listen, nullptr, nullptr);
+        std::cout << "[!] Searching for Source " << std::endl;
         sleep(1);
     }
     }
