@@ -55,6 +55,7 @@ ssize_t TcpSocket::read(uint8_t* buf, std::size_t maxlen){
 
 ssize_t TcpSocket::write(const uint8_t* buf, std::size_t len){
     ssize_t n = send(_fd, buf, len, 0);
+    std::cout << "sent\n";
     return n;
 }
 
