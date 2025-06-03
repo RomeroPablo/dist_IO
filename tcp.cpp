@@ -6,6 +6,7 @@
 
 TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
    if(serverIP.size() != 0){
+       // client side
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     if(_fd < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
@@ -21,6 +22,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         throw std::system_error(errno, std::system_category(), "connection failed");
 
     } else {
+        // server side
     _listen = socket(AF_INET, SOCK_STREAM, 0);
     if(_listen < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
@@ -38,7 +40,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         sleep(1);
     }
     }
-   std::cout << "[+] Initialized TCP Socket: " << _fd << std::endl;
+   std::cout << "[+] Initialized TCP Socket, fd = " << _fd << std::endl;
 }
 
 TcpSocket::~TcpSocket(){
@@ -56,8 +58,17 @@ std::size_t TcpSocket::write(const uint8_t* buf, std::size_t len){
 }
 
 void TcpSocket::reconnect(){
-    while(accept(_fd, nullptr, nullptr) <= 0){
+    if(_listen < 0)
+        return;
+
+    if(_fd >= 0){
+        close(_fd);
+        _fd = -1;
+    }
+
+    while(_fd < 0){
         std::cout << "[!] attempting reconnect fd: " << _fd << std::endl;
+        _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
 }

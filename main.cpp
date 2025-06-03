@@ -13,7 +13,10 @@ void client_t(RingBuffer &ringBuffer){
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
         if(write_amount <= 0){
-            client_socket.reconnect();
+            //TODO
+            //this is wrong, (?) we just write to somewhere, and have a dedicated (something?) 
+            // write to all clients idk.... but you def. don't do this
+            //client_socket.reconnect();
         }
     }
 }
