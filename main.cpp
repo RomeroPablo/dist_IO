@@ -27,8 +27,9 @@ void source_t(RingBuffer &ringBuffer){
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
             source_socket.reconnect();
+        } else {
+            ringBuffer.write(temp.data(), read_amount);
         }
-        ringBuffer.write(temp.data(), read_amount);
     }
 }
 
