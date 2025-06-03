@@ -13,7 +13,7 @@ void client_t(RingBuffer &ringBuffer){
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
         if(write_amount <= 0){
-            //client_socket.reconnect();
+            client_socket.reconnect();
         }
     }
 }
@@ -39,6 +39,10 @@ void source_t(RingBuffer &ringBuffer){
 // crashes when client closes connection
 // infinite loop when source closes connection, but then won't crash when client closes after
 // poor serial line output info
+//
+// if you connect your client and leave, nothing happens
+// if you then connect your source, it will crash
+// I believe your source thread is trying to write to something (or read from something!) which causes the program to crash
 
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
