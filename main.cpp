@@ -26,8 +26,7 @@ void source_t(RingBuffer &ringBuffer){
     while(true){
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
-            //std::cout << "src rec" << std::endl;
-            //source_socket.reconnect();
+            source_socket.reconnect();
         }
         ringBuffer.write(temp.data(), read_amount);
     }
