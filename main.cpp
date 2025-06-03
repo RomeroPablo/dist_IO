@@ -41,6 +41,7 @@ void tcp_proc(RingBuffer &ringBuffer){
 }
 
 //#define SERIAL
+// well, well...
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
     std::string portName = PORT;
