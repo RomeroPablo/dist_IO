@@ -33,6 +33,7 @@ void source_t(RingBuffer &ringBuffer){
     }
 }
 
+// four threads
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
     RingBuffer ringBuffer;
