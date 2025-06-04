@@ -136,10 +136,12 @@ void SerialPort::write(const uint8_t* buf, std::size_t len) {
 RingBuffer::RingBuffer() : head(0), tail(0), count(0) {}
 
 void RingBuffer::write(const uint8_t *data, size_t len){
+    std::cout << "Ring Buffer Write Enter" << std::endl;
     size_t written = 0;
     std::unique_lock<std::mutex> lock(mtx);
     while (written < len){
         not_full.wait(lock, [&]{ return count < BUFFERSIZE; });
+        std::cout << "Ring Write Lock Enter" << std::endl;
         size_t space = BUFFERSIZE - count;
         size_t to_write = std::min(len - written, space);
 
@@ -158,12 +160,14 @@ void RingBuffer::write(const uint8_t *data, size_t len){
         written += to_write;
         not_empty.notify_one();
     }
+        std::cout << "Ring Write Exit" << std::endl;
 }
 
 size_t RingBuffer::read(uint8_t *out, size_t maxlen){
+    std::cout << "Ring Buffer Read Enter" << std::endl;
     std::unique_lock<std::mutex> lock(mtx);
     not_empty.wait(lock, [&]{return count > 0;});
-    
+    std::cout << "Ring Read Lock Enter" << std::endl;   
     size_t to_read = std::min(count, maxlen);
     size_t end_space = BUFFERSIZE - head;
     size_t n1 = std::min(end_space, to_read);
@@ -179,5 +183,6 @@ size_t RingBuffer::read(uint8_t *out, size_t maxlen){
 
     count -= to_read;
     not_full.notify_one();
+    std::cout << "Ring Read Exit" << std::endl;
     return to_read;
 }
