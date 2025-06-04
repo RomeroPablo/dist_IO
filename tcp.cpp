@@ -10,16 +10,23 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
     if(_fd < 0)
         throw std::system_error(errno, std::system_category(), "socket creation failed");
 
+
     sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
+    
 
     if(inet_pton(AF_INET, serverIP.c_str(), &serv_addr.sin_addr) <= 0)
         throw std::system_error(errno, std::system_category(), "pton failed");
 
-    if(connect(_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
-        throw std::system_error(errno, std::system_category(), "connection failed");
+
+    while(connect(_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0){
+        std::cout << "[!] Unable to connect to server!" << std::endl;
+        sleep(1);
+    }
+
     std::cout << "[+] Initialized connection on: " << _fd << std::endl;
+
     } else {
         // server side
     _listen = socket(AF_INET, SOCK_STREAM, 0);
@@ -53,7 +60,7 @@ ssize_t TcpSocket::read(uint8_t* buf, std::size_t maxlen){
 }
 
 ssize_t TcpSocket::write(const uint8_t* buf, std::size_t len){
-    ssize_t n = ::write(_fd, buf, len);
+    ssize_t n = ::send(_fd, buf, len, MSG_NOSIGNAL);
     return n;
 }
 
