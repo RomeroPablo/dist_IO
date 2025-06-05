@@ -28,6 +28,9 @@ void source_t(RingBuffer &ringBuffer){
     int read_amount = 0;
     while(true){
         std::cout << "Source Loop" << std::endl;
+        // our source get's stuck here, we did not cleanly disc
+        // so it gets stuck here as it is blocking
+        // we are able to connect to it, but we are never re-accepted
         read_amount = source_socket.read(temp.data(), temp.size());
         if(read_amount <= 0){
             std::cout << "Source Reconnect Enter " << std::endl;

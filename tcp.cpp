@@ -1,5 +1,6 @@
 #include "tcp.hpp"
 #include <cstdint>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <system_error>
 #include <termios.h>
@@ -40,6 +41,8 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
         _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
+    int flags = fcntl(_fd, F_GETFL, 0);
+    fcntl(_fd, F_SETFL, flags | O_NONBLOCK); 
     std::cout << "[+] Initialized connection on: " << _listen << std::endl;
     }
 }
@@ -72,6 +75,8 @@ void TcpSocket::reconnect(){
         _fd = accept(_listen, nullptr, nullptr);
         sleep(1);
     }
+        int flags = fcntl(_fd, F_GETFL, 0);
+        fcntl(_fd, F_SETFL, flags | O_NONBLOCK); 
         std::cout << "[+] reconnect on: " << _listen << std::endl;
 
 }
