@@ -14,7 +14,7 @@ void client_t(RingBuffer &ringBuffer){
         std::cout << "Client Loop" << std::endl;
         read_amount = ringBuffer.read(temp.data(), temp.size());
         write_amount = client_socket.write(temp.data(), read_amount);
-        if(write_amount <= 0){
+        if(write_amount < 0){
             std::cout << "Client Reconnect Enter " << std::endl;
             client_socket.reconnect();
         }
@@ -32,7 +32,7 @@ void source_t(RingBuffer &ringBuffer){
         // so it gets stuck here as it is blocking
         // we are able to connect to it, but we are never re-accepted
         read_amount = source_socket.read(temp.data(), temp.size());
-        if(read_amount <= 0){
+        if(read_amount < 0){
             std::cout << "Source Reconnect Enter " << std::endl;
             source_socket.reconnect();
         } else {
