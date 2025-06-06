@@ -1,5 +1,6 @@
 #include "serial.hpp"
 #include "tcp.hpp"
+#include "ringbuffer.hpp"
 #include "config.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -155,9 +156,9 @@ void photon_proc(RingBuffer &ringBuffer){
     std::vector<uint8_t> temp(READ_CHUNK);
     while(true){
         size_t amount_read = ringBuffer.read(temp.data(), temp.size());
-        std::cout.write((char*)temp.data(), amount_read) << std::endl;
-        std::cout.flush();
-        //parse((uint8_t*)temp.data(), amount_read);
+        //std::cout.write((char*)temp.data(), amount_read) << std::endl;
+        //std::cout.flush();
+        parse((uint8_t*)temp.data(), amount_read);
     }
 }
 
@@ -169,7 +170,9 @@ enum source_t {
 };
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
-    int res = std::stoi(argv[1]);
+    int res = 0;
+    if (argc == 0)
+        res = std::stoi(argv[1]);
     source_t source = (source_t)res;
 
     std::string portName = "/dev/pts/3";//PORT;

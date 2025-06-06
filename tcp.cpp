@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <sys/socket.h>
 #include <system_error>
+#include <iostream>
+#include <unistd.h>
 
 TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
    if(serverIP.size() != 0){
@@ -14,7 +16,7 @@ TcpSocket::TcpSocket(const std::string& serverIP, unsigned port){
     sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
-    
+
 
     if(inet_pton(AF_INET, serverIP.c_str(), &serv_addr.sin_addr) <= 0)
         throw std::system_error(errno, std::system_category(), "pton failed");

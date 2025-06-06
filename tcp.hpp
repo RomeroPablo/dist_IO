@@ -4,18 +4,11 @@
 #include <cstdint>
 #include <cstddef>
 #include <sys/types.h>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <vector>
-#include <iostream>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
-#include "serial.hpp"
 
 class TcpSocket {
     public:
