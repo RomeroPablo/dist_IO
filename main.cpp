@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 #include <array>
+#include <memory>
 
 // Parse SLCAN Data
 // in the form:
@@ -154,8 +155,8 @@ void photon_proc(RingBuffer &ringBuffer){
     std::vector<uint8_t> temp(READ_CHUNK);
     while(true){
         size_t amount_read = ringBuffer.read(temp.data(), temp.size());
-        //std::cout.write((char*)temp.data(), amount_read) << std::endl;
-        //std::cout.flush();
+        std::cout.write((char*)temp.data(), amount_read) << std::endl;
+        std::cout.flush();
         //parse((uint8_t*)temp.data(), amount_read);
     }
 }
@@ -171,26 +172,27 @@ int main(int argc, char* argv[]){
     int res = std::stoi(argv[1]);
     source_t source = (source_t)res;
 
-    std::string portName = PORT;
+    std::string portName = "/dev/pts/3";//PORT;
     unsigned baud = 115200;
     std::string serverIP = IP;
     unsigned port = 5700;
 
-    SerialPort serial(portName, baud);
-    TcpSocket  tcp(serverIP, port);
-    
-    SerialPort* Serial_p;
-    TcpSocket* TCP_p;
+    std::unique_ptr<SerialPort> serial;
+    std::unique_ptr<TcpSocket> tcp;
 
     RingBuffer ringBuffer;
 
     std::thread prod_t;
 
-    if(source == local)
-        prod_t = std::thread(serial_read, std::ref(serial), std::ref(ringBuffer));
+    if(source == local){
+        serial = std::make_unique<SerialPort>(portName, baud);
+        prod_t = std::thread(serial_read, std::ref(*serial), std::ref(ringBuffer));
+    }
 
-    if(source == remote)
-        prod_t = std::thread(tcp_read, std::ref(tcp), std::ref(ringBuffer));
+    if(source == remote){
+        tcp = std::make_unique<TcpSocket>(serverIP, port);
+        prod_t = std::thread(tcp_read, std::ref(*tcp), std::ref(ringBuffer));
+    }
 
     std::thread photon_t(photon_proc, std::ref(ringBuffer));
 
