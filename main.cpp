@@ -156,7 +156,7 @@ void photon_proc(RingBuffer &ringBuffer){
         size_t amount_read = ringBuffer.read(temp.data(), temp.size());
         //std::cout.write((char*)temp.data(), amount_read) << std::endl;
         //std::cout.flush();
-        parse((uint8_t*)temp.data(), amount_read);
+        //parse((uint8_t*)temp.data(), amount_read);
     }
 }
 
@@ -178,13 +178,16 @@ int main(int argc, char* argv[]){
 
     SerialPort serial(portName, baud);
     TcpSocket  tcp(serverIP, port);
+    
+    SerialPort* Serial_p;
+    TcpSocket* TCP_p;
 
     RingBuffer ringBuffer;
 
     std::thread prod_t;
 
     if(source == local)
-         prod_t = std::thread(serial_read, std::ref(serial), std::ref(ringBuffer));
+        prod_t = std::thread(serial_read, std::ref(serial), std::ref(ringBuffer));
 
     if(source == remote)
         prod_t = std::thread(tcp_read, std::ref(tcp), std::ref(ringBuffer));
