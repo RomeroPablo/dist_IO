@@ -1,4 +1,5 @@
 #include "candb.hpp"
+#include <cstring>
 
 void CanStore::store(IdType id, uint8_t len, const uint8_t* payload){
     if(id >= MAX_IDS || !payload || len > 8)
@@ -11,7 +12,7 @@ void CanStore::store(IdType id, uint8_t len, const uint8_t* payload){
     e.valid = true;
 }
 
-bool CanStore::read(IdType id, CanFrame& out) const {
+bool CanStore::read(IdType id, CanFrame& out) {
     if(id >= MAX_IDS)
         return false;
     const Entry &e = _entries[id];

@@ -16,7 +16,7 @@ class CanStore {
         CanStore() = default;
 
         void store(IdType id, uint8_t len, const uint8_t* payload);
-        bool read(IdType id, CanFrame& out) const;
+        bool read(IdType id, CanFrame& out);
 
     private:
         struct Entry{
@@ -25,5 +25,4 @@ class CanStore {
         };
 
         std::array<Entry, MAX_IDS> _entries{};
-
 };
