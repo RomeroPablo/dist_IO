@@ -1,6 +1,7 @@
 #include "serial.hpp"
 #include "tcp.hpp"
 #include "ringbuffer.hpp"
+#include "candb.hpp"
 #include "config.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -9,28 +10,8 @@
 #include <array>
 #include <memory>
 
-// Parse SLCAN Data
-// in the form:
-// t1232AABB\r
-// where 't' indicates the beginning of a message,
-// 123 indicate the CAN ID (in HEX, e.g. it may be 102, 1FE, 4EA, etc.)
-// the following '2' indicates the amount of data pairs that follow
-// AABB is the actual data, where the pairs are in serialized hex
-// e.g. AA is a pair == 170, BB is a pair == 187, etc.
-//
-// make sure to keep performance in mind
-// parse using an FSM
-// zero-copying, and minimal buffering
-// be cognizant of branch predicition and caching
-// you may also want to have the ability to use precomputed tables for hex  and ID decoding
-// you may also want to take advantage of SIMD techniques
-// make sure you do not allocate or free memory in the hot path, if requried, make sure to pre-allocate
-// also consider how you want to handle dispatching the data,
-// considering we have a finite and reasonable amount of CAN ids, having a pre-allocated array for routing
-// your output is fine
-// be careful and mindful of performance when using stl
-// avoid hidden costs in cpp, e.g. mark your small functions as inline, so the compiler can optimize
-// away call-overhead
+static CanStore can_store;
+
 enum class ParseState : uint8_t {
     WaitStart,
     Id,
@@ -56,7 +37,8 @@ static inline uint8_t hex_value(uint8_t c){
 }
 
 inline void dispatch(uint32_t id, uint8_t len, const uint8_t* payload){
-    //TODO: replace w/ routing table
+   can_store.store(static_cast<CanStore::IdType>(id), len, payload);
+   // TODO remove debug output b4 deployment
     std::cout << "ID:" << std::hex << id << " LEN:" << std::dec
               << static_cast<int>(len) << " DATA:";
     for(uint8_t i = 0; i < len; ++i)
@@ -161,8 +143,6 @@ void photon_proc(RingBuffer &ringBuffer){
         parse((uint8_t*)temp.data(), amount_read);
     }
 }
-
-
 
 enum source_t {
     local,
