@@ -188,15 +188,10 @@ enum source_t {
 int main(int argc, char* argv[]){
     (void)argc;(void)argv;
     int res = 0;
-    if (argc == 0)
+    if (argc != 0)
         res = std::stoi(argv[1]);
     source_t source = (source_t)res;
-
-    std::string portName = "/dev/pts/3";//PORT;
-    unsigned baud = 115200;
-    std::string serverIP = IP;
-    unsigned port = 5700;
-
+    
     std::unique_ptr<SerialPort> serial;
     std::unique_ptr<TcpSocket> tcp;
 
@@ -205,19 +200,22 @@ int main(int argc, char* argv[]){
     std::thread prod_t;
 
     if(source == local){
+        std::string portName = "/dev/pts/3";//PORT;
+        unsigned baud = 115200;
         serial = std::make_unique<SerialPort>(portName, baud);
         prod_t = std::thread(serial_read, std::ref(*serial), std::ref(ringBuffer));
     }
 
     if(source == remote){
+        std::string serverIP = IP;
+        unsigned port = 5700;
         tcp = std::make_unique<TcpSocket>(serverIP, port);
         prod_t = std::thread(tcp_read, std::ref(*tcp), std::ref(ringBuffer));
     }
 
     std::thread photon_t(photon_proc, std::ref(ringBuffer));
 
-    user_prompt();
-    //std::cin.get();
+    //user_prompt();
     prod_t.join();
     photon_t.join();
 }
