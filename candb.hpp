@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <mutex>
 
 struct CanFrame {
     uint8_t len = 0;
@@ -16,12 +17,13 @@ class CanStore {
         CanStore() = default;
 
         void store(IdType id, uint8_t len, const uint8_t* payload);
-        bool read(IdType id, CanFrame& out);
+        bool read(IdType id, CanFrame& out) const;
 
     private:
         struct Entry{
             CanFrame frame;
             bool valid = false;
+            mutable std::mutex mtx;
         };
 
         std::array<Entry, MAX_IDS> _entries{};

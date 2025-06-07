@@ -5,6 +5,9 @@
 #include "config.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <iomanip>
+#include <ios>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <array>
@@ -38,12 +41,16 @@ static inline uint8_t hex_value(uint8_t c){
 
 inline void dispatch(uint32_t id, uint8_t len, const uint8_t* payload){
    can_store.store(static_cast<CanStore::IdType>(id), len, payload);
-   // TODO remove debug output b4 deployment
+   
+   /*
     std::cout << "ID:" << std::hex << id << " LEN:" << std::dec
               << static_cast<int>(len) << " DATA:";
     for(uint8_t i = 0; i < len; ++i)
-        std::cout << std::hex << static_cast<int>(payload[i]);
-    std::cout << std::dec << std::endl;
+        std::cout << std::uppercase << std::hex << std::setw(2)
+                  << std::setfill('0') << static_cast<int>(payload[i]);
+    std::cout << std::dec << std::nouppercase << std::setfill(' ') << std::endl;
+
+    */
 }
 
 void parse(const uint8_t* data, size_t len){
@@ -144,6 +151,36 @@ void photon_proc(RingBuffer &ringBuffer){
     }
 }
 
+void user_prompt(){
+    std::string input;
+    while(true){
+        std::cout << "[!] Request CAN ID data (hex) or q to quit: ";
+        if(!(std::cin >> input))
+            return;
+        if(input == "q" || input == "quit")
+            return;
+        unsigned id = 0;
+        std::stringstream ss;
+        ss << std::hex << input;
+        if(!(ss >> id)){
+            std::cout << "Invalid ID" << std::endl;
+            continue;
+        }
+        CanFrame frame;
+        if(can_store.read(static_cast<CanStore::IdType>(id), frame)){
+            std::cout << "LEN: " << std::dec << static_cast<int>(frame.len)
+                      << " DATA: ";
+            for(uint8_t i = 0; i < frame.len; ++i)
+                std::cout << std::uppercase << std::hex << std::setw(2)
+                          << std::setfill('0') << static_cast<int>(frame.data[i]);
+
+            std::cout << std::dec << std::nouppercase << std::setfill(' ') << std::endl;
+        } else {
+            std::cout << "No data for ID" << std::endl;
+        }
+    }
+}
+
 enum source_t {
     local,
     remote
@@ -179,7 +216,8 @@ int main(int argc, char* argv[]){
 
     std::thread photon_t(photon_proc, std::ref(ringBuffer));
 
-    std::cin.get();
+    user_prompt();
+    //std::cin.get();
     prod_t.join();
     photon_t.join();
 }
