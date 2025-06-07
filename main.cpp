@@ -2,6 +2,7 @@
 #include "tcp.hpp"
 #include "ringbuffer.hpp"
 #include "candb.hpp"
+#include "dbc.hpp"
 #include "config.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <memory>
 
 static CanStore can_store;
+static DbcParser dbc;
 
 enum class ParseState : uint8_t {
     WaitStart,
@@ -145,8 +147,8 @@ void photon_proc(RingBuffer &ringBuffer){
     std::vector<uint8_t> temp(READ_CHUNK);
     while(true){
         size_t amount_read = ringBuffer.read(temp.data(), temp.size());
-        //std::cout.write((char*)temp.data(), amount_read) << std::endl;
-        //std::cout.flush();
+        std::cout.write((char*)temp.data(), amount_read) << std::endl;
+        std::cout.flush();
         parse((uint8_t*)temp.data(), amount_read);
     }
 }
@@ -168,6 +170,7 @@ void user_prompt(){
         }
         CanFrame frame;
         if(can_store.read(static_cast<CanStore::IdType>(id), frame)){
+            /*
             std::cout << "LEN: " << std::dec << static_cast<int>(frame.len)
                       << " DATA: ";
             for(uint8_t i = 0; i < frame.len; ++i)
@@ -175,6 +178,17 @@ void user_prompt(){
                           << std::setfill('0') << static_cast<int>(frame.data[i]);
 
             std::cout << std::dec << std::nouppercase << std::setfill(' ') << std::endl;
+            */
+            std::string decoded;
+            if(dbc.decode(id,frame,decoded)){
+                std::cout << decoded << std::endl;
+            } else {
+                std::cout << "Len: " << std::dec << static_cast<int>(frame.len) << " Data: ";
+                for(uint8_t i = 0; i < frame.len; ++i)
+                    std::cout << std::uppercase << std::hex << std::setw(2)
+                              << std::setfill('0') << static_cast<int>(frame.data[i]);
+                std::cout << std::dec << std::nouppercase << std::setfill(' ')<<std::endl;
+            }
         } else {
             std::cout << "No data for ID" << std::endl;
         }
@@ -191,6 +205,13 @@ int main(int argc, char* argv[]){
     if (argc != 0)
         res = std::stoi(argv[1]);
     source_t source = (source_t)res;
+
+    for(int i = 2; i < argc; i++){
+        std::cout << "Decoding ";
+        std::cout << argv[i] << std::endl;
+        dbc.load(argv[i]);
+    }
+
     
     std::unique_ptr<SerialPort> serial;
     std::unique_ptr<TcpSocket> tcp;

@@ -2,7 +2,7 @@ CXX := g++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
 TARGET := a.out
 BUILD_DIR := build
-SRCS := main.cpp serial.cpp tcp.cpp ringbuffer.cpp candb.cpp
+SRCS := main.cpp serial.cpp tcp.cpp ringbuffer.cpp candb.cpp dbc.cpp
 OBJS := $(SRCS:%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
