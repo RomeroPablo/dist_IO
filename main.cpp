@@ -1,64 +1,140 @@
 #include "serial.hpp"
-#include "tcp.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <thread>
+#include <vector>
+#include <mutex>
+#include <condition_variable>
+#include <iostream>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
+constexpr unsigned CLIENT_PORT = 5700;
+constexpr unsigned SOURCE_PORT = 5600;
 
-#define CLIENT_PORT 5700
-void client_t(RingBuffer &ringBuffer){
-    TcpSocket client_socket("", CLIENT_PORT);
-    std::vector<uint8_t> temp(READ_CHUNK);
-    int read_amount = 0;
-    int write_amount = 0;
+static std::vector<int> clients;
+static std::mutex clients_mtx;
+
+static int source_fd = -1;
+static int source_listen_fd = -1;
+static std::mutex source_mtx;
+static std::condition_variable source_cv;
+
+int create_listener(unsigned port){
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(fd < 0) throw std::system_error(errno, std::system_category(), "socket");
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    if(bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0)
+        throw std::system_error(errno, std::system_category(), "bind");
+    if(listen(fd, 16) < 0)
+        throw std::system_error(errno, std::system_category(), "listen");
+    return fd;
+}
+
+void source_connection_thread(){
+    source_listen_fd = create_listener(SOURCE_PORT);
     while(true){
-        std::cout << "Client Loop" << std::endl;
-        read_amount = ringBuffer.read(temp.data(), temp.size());
-        write_amount = client_socket.write(temp.data(), read_amount);
-        if(write_amount <= 0){
-            std::cout << "Client Reconnect Enter " << std::endl;
-            client_socket.reconnect();
+        int fd = accept(source_listen_fd, nullptr, nullptr);
+        if(fd < 0) continue;
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        {
+            std::lock_guard<std::mutex> lock(source_mtx);
+            if(source_fd >= 0) close(source_fd);
+            source_fd = fd;
         }
+        source_cv.notify_all();
+        std::cout << "[+] Source connected" << std::endl;
     }
 }
 
-#define SOURCE_PORT 5600
-void source_t(RingBuffer &ringBuffer){
-    TcpSocket source_socket("", SOURCE_PORT);
-    std::vector<uint8_t> temp(READ_CHUNK);
-    int read_amount = 0;
+void source_read_thread(RingBuffer &rb){
+    std::vector<uint8_t> buf(READ_CHUNK);
     while(true){
-        std::cout << "Source Loop" << std::endl;
-        read_amount = source_socket.read(temp.data(), temp.size());
-        if(read_amount <= 0){
-            int err = errno;
-            if(err == EAGAIN || err == EWOULDBLOCK){
+        int fd;
+        {
+            std::unique_lock<std::mutex> lock(source_mtx);
+            source_cv.wait(lock, []{return source_fd >= 0;});
+            fd = source_fd;
+        }
+        ssize_t n = ::recv(fd, buf.data(), buf.size(), 0);
+        if(n <= 0){
+            if(n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
                 continue;
+            {
+                std::lock_guard<std::mutex> lock(source_mtx);
+                if(source_fd >= 0) close(source_fd);
+                source_fd = -1;
             }
-            std::cout << "Source Reconnect Enter " << std::endl;
-            source_socket.reconnect();
-        } else {
-            ringBuffer.write(temp.data(), read_amount);
+            std::cout << "[!] Source disconnected" << std::endl;
+            continue;
         }
+        rb.write(buf.data(), static_cast<size_t>(n));
     }
 }
 
-// four threads
-// one thread for handling client connections
-// one thread for handling client rb.read -> tcp.write
+void client_accept_thread(){
+    int listen_fd = create_listener(CLIENT_PORT);
+    while(true){
+        int fd = accept(listen_fd, nullptr, nullptr);
+        if(fd < 0) continue;
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        {
+            std::lock_guard<std::mutex> lock(clients_mtx);
+            clients.push_back(fd);
+        }
+        std::cout << "[+] Client connected" << std::endl;
+    }
+}
 
-// one thread for handling source connections
-// one thread for handling source tcp.read -> rb.write
-
-// at this point in time, we will only have 1 client and 1 source, however, this should also support N clients N sources
+void writer_thread(RingBuffer &rb){
+    std::vector<uint8_t> buf(READ_CHUNK);
+    while(true){
+        size_t n = rb.read(buf.data(), buf.size());
+        std::lock_guard<std::mutex> lock(clients_mtx);
+        for(auto it = clients.begin(); it != clients.end(); ){
+            ssize_t w = ::send(*it, buf.data(), n, MSG_NOSIGNAL);
+            if(w <= 0){
+                std::cout << "[!] Removing client" << std::endl;
+                close(*it);
+                it = clients.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
 
 int main(int argc, char* argv[]){
-    (void)argc;(void)argv;
+    (void)argc; (void)argv;
     RingBuffer ringBuffer;
 
-    std::thread t_source_t(source_t, std::ref(ringBuffer));
-    std::thread t_client_t(client_t, std::ref(ringBuffer));
+    std::thread t_conn(source_connection_thread);
+    std::thread t_read(source_read_thread, std::ref(ringBuffer));
+    std::thread t_client(client_accept_thread);
+    std::thread t_writer(writer_thread, std::ref(ringBuffer));
+
     std::cin.get();
-    t_source_t.join();
-    t_client_t.join();
+
+    t_conn.join();
+    t_read.join();
+    t_client.join();
+    t_writer.join();
+    return 0;
 }
+
+// four threads:
+// source connection thread - e.g. connecting to the lte module
+// source write to buffer thread - e.g. forward lte data to the Ring Buffer
+// client connection thread - e.g. deal with clients connecting and disconnecting from the server
+// client read thread - e.g. forwarding buffer contents to all the clients
+
