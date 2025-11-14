@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <netinet/in.h>
+#include <ratio>
 #include <stdexcept>
 #include <system_error>
 #include <string>
@@ -18,6 +19,7 @@
 
 constexpr unsigned CLIENT_PORT = 8187;
 constexpr unsigned HOST_PORT = 5600;
+constexpr unsigned TEST_PORT = 5500;
 
 namespace {
 
@@ -161,6 +163,48 @@ void heartbeat(RingBuffer& ring_buffer) {
     }
 }
 
+// what do we need?
+// a thread that just listens for new tcp connections on HOST_PORT
+// if it receives a new connection, kill the existing pull and push thread
+// create a new pull and push thread, connected to that port
+// p&p will now:
+// if the thread has not been killed:
+// read from the tcp port
+// push the contents to the ring buffer
+int host_fd= -1;
+std::atomic<bool> newHost = false;
+
+void car_reader(int fd, RingBuffer& ring_buffer){
+    try{
+    std::array<uint8_t, READ_CHUNK> buffer;
+    while(!newHost.load(std::memory_order_relaxed)){
+        size_t readSize = ::read(fd, buffer.data(), buffer.size());
+        if(readSize > 0){
+            ring_buffer.write(buffer.data(), buffer.size());
+        }
+    }
+    }catch(...){}
+}
+
+void car_accept_thread(RingBuffer& ring_buffer){
+    try{
+    std::thread currentInstance;
+    host_fd= create_listener(TEST_PORT);
+    while(1){
+        int ret = ::accept(host_fd, nullptr, nullptr);
+        if(ret < 0){
+            if(ret == EINTR) continue;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        newHost = true;
+        if(currentInstance.joinable()) currentInstance.join();
+        newHost = false;
+        currentInstance = std::thread(car_reader, host_fd, std::ref(ring_buffer));
+    }
+    }catch(...){}
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -170,10 +214,13 @@ int main(int argc, char* argv[]) {
     RingBuffer ring_buffer;
 
     std::thread accept_thread(client_accept_thread, std::ref(ring_buffer));
-    std::thread heartbeat_thread(heartbeat, std::ref(ring_buffer));
-
     accept_thread.detach();
-    heartbeat_thread.detach();
+
+    std::thread car_thread(car_accept_thread, std::ref(ring_buffer));
+    car_thread.detach();
+
+    //std::thread heartbeat_thread(heartbeat, std::ref(ring_buffer));
+    //heartbeat_thread.detach();
 
     while (true) {
         std::this_thread::sleep_for(std::chrono::hours(24));
