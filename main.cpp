@@ -180,7 +180,7 @@ void car_reader(int fd, RingBuffer& ring_buffer){
     while(!newHost.load(std::memory_order_relaxed)){
         size_t readSize = ::read(fd, buffer.data(), buffer.size());
         if(readSize > 0){
-            ring_buffer.write(buffer.data(), buffer.size());
+            ring_buffer.write(buffer.data(), readSize);
         }
     }
     }catch(...){}
