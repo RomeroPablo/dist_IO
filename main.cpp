@@ -1,140 +1,183 @@
-#include "serial.hpp"
-#include <cerrno>
-#include <cstdint>
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <condition_variable>
-#include <iostream>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include "ringbuffer.hpp"
+
 #include <arpa/inet.h>
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <netinet/in.h>
+#include <stdexcept>
+#include <system_error>
+#include <string>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 
-constexpr unsigned CLIENT_PORT = 5700;
-constexpr unsigned SOURCE_PORT = 5600;
+constexpr unsigned CLIENT_PORT = 8187;
+constexpr unsigned HOST_PORT = 5600;
 
-static std::vector<int> clients;
-static std::mutex clients_mtx;
+namespace {
 
-static int source_fd = -1;
-static int source_listen_fd = -1;
-static std::mutex source_mtx;
-static std::condition_variable source_cv;
+int client_listen_fd = -1;
 
-int create_listener(unsigned port){
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if(fd < 0) throw std::system_error(errno, std::system_category(), "socket");
+int create_listener(unsigned port) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        throw std::system_error(errno, std::system_category(), "socket");
+    }
+
     int opt = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+    ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
-    if(bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0)
+
+    if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        ::close(fd);
         throw std::system_error(errno, std::system_category(), "bind");
-    if(listen(fd, 16) < 0)
+    }
+
+    if (::listen(fd, 32) < 0) {
+        ::close(fd);
         throw std::system_error(errno, std::system_category(), "listen");
+    }
+
     return fd;
 }
 
-void source_connection_thread(){
-    source_listen_fd = create_listener(SOURCE_PORT);
-    while(true){
-        int fd = accept(source_listen_fd, nullptr, nullptr);
-        if(fd < 0) continue;
-        int flags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-        {
-            std::lock_guard<std::mutex> lock(source_mtx);
-            if(source_fd >= 0) close(source_fd);
-            source_fd = fd;
+void client_writer(int fd, RingBuffer& ring_buffer) {
+    try {
+        auto reader = ring_buffer.create_reader();
+        std::vector<uint8_t> buffer(READ_CHUNK);
+
+        while (ring_buffer.is_running()) {
+            std::size_t available = reader.read_blocking(buffer.data(), buffer.size());
+            if (available == 0) {
+                if (!ring_buffer.is_running()) {
+                    break;
+                }
+                continue;
+            }
+
+            std::size_t sent = 0;
+            while (sent < available) {
+                ssize_t wrote = ::send(fd, buffer.data() + sent, available - sent, MSG_NOSIGNAL);
+                if (wrote <= 0) {
+                    if (wrote < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        continue;
+                    }
+                    throw std::runtime_error("client disconnected");
+                }
+                sent += static_cast<std::size_t>(wrote);
+            }
         }
-        source_cv.notify_all();
-        std::cout << "[+] Source connected" << std::endl;
+    } catch (...) {
+        // Fall through to close socket.
     }
+
+    ::close(fd);
 }
 
-void source_read_thread(RingBuffer &rb){
-    std::vector<uint8_t> buf(READ_CHUNK);
-    while(true){
-        int fd;
-        {
-            std::unique_lock<std::mutex> lock(source_mtx);
-            source_cv.wait(lock, []{return source_fd >= 0;});
-            fd = source_fd;
-        }
-        ssize_t n = ::recv(fd, buf.data(), buf.size(), 0);
-        if(n <= 0){
-            if(n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+void client_accept_thread(RingBuffer& ring_buffer) {
+    client_listen_fd = create_listener(CLIENT_PORT);
+
+    while (true) {
+        int fd = ::accept(client_listen_fd, nullptr, nullptr);
+        if (fd < 0) {
+            if (errno == EINTR) {
                 continue;
-            {
-                std::lock_guard<std::mutex> lock(source_mtx);
-                if(source_fd >= 0) close(source_fd);
-                source_fd = -1;
             }
-            std::cout << "[!] Source disconnected" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-        rb.write(buf.data(), static_cast<size_t>(n));
+
+        std::thread(client_writer, fd, std::ref(ring_buffer)).detach();
     }
+
+    // Listener remains open until process is terminated externally.
 }
 
-void client_accept_thread(){
-    int listen_fd = create_listener(CLIENT_PORT);
-    while(true){
-        int fd = accept(listen_fd, nullptr, nullptr);
-        if(fd < 0) continue;
-        int flags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-        {
-            std::lock_guard<std::mutex> lock(clients_mtx);
-            clients.push_back(fd);
+constexpr std::array<uint16_t, 8> kHeartbeatCanIds = {0x7FF, 0x002, 0x003, 0x1FF,
+                                                      0x512, 0x400, 0x300, 0x114};
+constexpr std::size_t kPayloadLength = 1;
+constexpr std::size_t kFrameLength = 1 + 3 + 1 + (kPayloadLength * 2) + 1;
+
+char hex_char(uint8_t value) {
+    value &= 0xF;
+    return value < 10 ? static_cast<char>('0' + value)
+                      : static_cast<char>('A' + (value - 10));
+}
+
+constexpr std::array<uint8_t, 100> kSineTable = {
+    128, 136, 143, 151, 159, 167, 174, 182, 189, 196, 202, 209, 215, 220,
+    226, 231, 235, 239, 243, 246, 249, 251, 253, 254, 255, 255, 255, 254,
+    253, 251, 249, 246, 243, 239, 235, 231, 226, 220, 215, 209, 202, 196,
+    189, 182, 174, 167, 159, 151, 143, 136, 128, 119, 112, 104, 96, 88, 81,
+    73, 66, 59, 53, 46, 40, 35, 29, 24, 20, 16, 12, 9, 6, 4, 2, 1, 0, 0, 0,
+    1, 2, 4, 6, 9, 12, 16, 20, 24, 29, 35, 40, 46, 53, 59, 66, 73, 81, 88,
+    96, 104, 112, 119};
+
+void encode_frame(uint16_t can_id,
+                  const std::array<uint8_t, kPayloadLength>& payload,
+                  std::array<char, kFrameLength>& frame) {
+    frame[0] = 't';
+    frame[1] = hex_char((can_id >> 8) & 0xF);
+    frame[2] = hex_char((can_id >> 4) & 0xF);
+    frame[3] = hex_char(can_id & 0xF);
+    frame[4] = static_cast<char>('0' + kPayloadLength);
+
+    std::size_t cursor = 5;
+    for (std::size_t i = 0; i < kPayloadLength; ++i) {
+        frame[cursor++] = hex_char(payload[i] >> 4);
+        frame[cursor++] = hex_char(payload[i]);
+    }
+    frame[cursor] = '\r';
+}
+
+void heartbeat(RingBuffer& ring_buffer) {
+    std::array<char, kFrameLength> frame{};
+    std::array<uint8_t, kPayloadLength> payload{};
+    std::size_t index = 0;
+
+    while (ring_buffer.is_running()) {
+        payload[0] = kSineTable[index];
+
+        for (uint16_t can_id : kHeartbeatCanIds) {
+            encode_frame(can_id, payload, frame);
+            ring_buffer.write(reinterpret_cast<const uint8_t*>(frame.data()),
+                              frame.size());
         }
-        std::cout << "[+] Client connected" << std::endl;
+
+        index = (index + 1) % kSineTable.size();
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(125));
+        std::this_thread::yield();
     }
 }
 
-void writer_thread(RingBuffer &rb){
-    std::vector<uint8_t> buf(READ_CHUNK);
-    while(true){
-        size_t n = rb.read(buf.data(), buf.size());
-        std::lock_guard<std::mutex> lock(clients_mtx);
-        for(auto it = clients.begin(); it != clients.end(); ){
-            ssize_t w = ::send(*it, buf.data(), n, MSG_NOSIGNAL);
-            if(w <= 0){
-                std::cout << "[!] Removing client" << std::endl;
-                close(*it);
-                it = clients.erase(it);
-            } else {
-                ++it;
-            }
-        }
+} // namespace
+
+int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
+
+    RingBuffer ring_buffer;
+
+    std::thread accept_thread(client_accept_thread, std::ref(ring_buffer));
+    std::thread heartbeat_thread(heartbeat, std::ref(ring_buffer));
+
+    accept_thread.detach();
+    heartbeat_thread.detach();
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::hours(24));
     }
-}
 
-int main(int argc, char* argv[]){
-    (void)argc; (void)argv;
-    RingBuffer ringBuffer;
-
-    std::thread t_conn(source_connection_thread);
-    std::thread t_read(source_read_thread, std::ref(ringBuffer));
-    std::thread t_client(client_accept_thread);
-    std::thread t_writer(writer_thread, std::ref(ringBuffer));
-
-    std::cin.get();
-
-    t_conn.join();
-    t_read.join();
-    t_client.join();
-    t_writer.join();
     return 0;
 }
-
-// four threads:
-// source connection thread - e.g. connecting to the lte module
-// source write to buffer thread - e.g. forward lte data to the Ring Buffer
-// client connection thread - e.g. deal with clients connecting and disconnecting from the server
-// client read thread - e.g. forwarding buffer contents to all the clients
-
