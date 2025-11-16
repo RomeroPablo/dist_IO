@@ -249,6 +249,7 @@ void car_reader(int fd, RingBuffer& ring_buffer) {
     ::close(log_fd);
 }
 */
+/*
 void car_reader(int fd, RingBuffer& ring_buffer){
     try{
     std::array<uint8_t, READ_CHUNK> buffer;
@@ -256,10 +257,32 @@ void car_reader(int fd, RingBuffer& ring_buffer){
         size_t readSize = ::read(fd, buffer.data(), buffer.size());
         if(readSize > 0){
             ring_buffer.write(buffer.data(), readSize);
-	    //std::cout.write((const char*)buffer.data(), readSize);
         }
     }
     }catch(...){}
+}
+*/
+void car_reader(int fd, RingBuffer& ring_buffer) {
+  std::array<uint8_t, READ_CHUNK> buffer;
+  while (!newHost.load(std::memory_order_relaxed)) {
+      ssize_t n = ::read(fd, buffer.data(), buffer.size());
+      if (n > 0) {
+          ring_buffer.write(buffer.data(), static_cast<std::size_t>(n));
+          continue;
+      }
+      if (n == 0) {  // orderly shutdown from peer
+          break;
+      }
+      if (errno == EINTR) {
+          continue; // retry
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          continue;
+      }
+      break; // fatal error (e.g., ECONNRESET)
+  }
+  ::close(fd);
 }
 
 void car_accept_thread(RingBuffer& ring_buffer){
@@ -276,7 +299,9 @@ void car_accept_thread(RingBuffer& ring_buffer){
         newHost = true;
         if(currentInstance.joinable()) currentInstance.join();
         newHost = false;
-        currentInstance = std::thread(car_reader, ret, std::ref(ring_buffer));
+        if(ret > 0)
+            currentInstance = std::thread(car_reader, ret, std::ref(ring_buffer));
+        ret = -1;
     }
     }catch(...){}
 }
