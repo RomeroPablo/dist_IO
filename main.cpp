@@ -92,8 +92,6 @@ void parser(std::vector<uint8_t> buffer, int available){
     std::string frame;
     frame.reserve(32);
     bool collecting = false;
-    std::cout << "this did in fact run..." << std::endl;
-
     while(available > 0){
             char ch = buffer.front();
             buffer.erase(buffer.begin());
@@ -112,7 +110,7 @@ void parser(std::vector<uint8_t> buffer, int available){
 
             if (ch == '\r') {
                 frame.push_back(ch);
-        		std::cout << frame; // should just print to std::out
+        		std::cout << frame << std::endl; // should just print to std::out
                 frame.clear();
                 collecting = false;
                 continue;
@@ -139,6 +137,7 @@ void logger(RingBuffer& ring_buffer){
 			}
 			continue;
 		}
+		std::cout << "xxx" << std::endl;
 		parser(buffer, available);
 	}
 	} catch (...){}
@@ -296,14 +295,30 @@ int main(int argc, char* argv[]) {
     std::thread car_thread(car_accept_thread, std::ref(ring_buffer));
     car_thread.detach();
 
-    std::thread loggThread(logger, std::ref(ring_buffer));
-    loggThread.detach();
+//    std::thread loggThread(logger, std::ref(ring_buffer));
+//    loggThread.detach();
 
     //std::thread heartbeat_thread(heartbeat, std::ref(ring_buffer));
     //heartbeat_thread.detach();
 
+	try{
+
+	auto reader = ring_buffer.create_reader();
+	std::vector<uint8_t> buffer(READ_CHUNK);
+	while(ring_buffer.is_running()){
+		std::size_t avail = reader.read_blocking(buffer.data(), buffer.size());
+		if(avail == 0){
+			if(!ring_buffer.is_running()){
+				break;
+			}
+			continue;
+		}
+		parser(buffer, avail);
+	}
+	} catch (...){}
+
     while (true) {
-        std::this_thread::sleep_for(std::chrono::hours(24));
+        std::this_thread::sleep_for(std::chrono::hours(2048));
     }
 
     return 0;
