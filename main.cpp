@@ -94,41 +94,34 @@ void parser(std::vector<uint8_t> buffer, int available){
     bool collecting = false;
 
     while(available > 0){
-        if(char* byte = (char*)buffer.front()){
-            char ch = static_cast<char>(*byte);
+            char ch = buffer.front();
             buffer.erase(buffer.begin());
+            available--;
 
             if (ch == 't') {
                 frame.clear();
                 frame.push_back(ch);
                 collecting = true;
-                available--;
                 continue;
             }
 
             if (!collecting) {
-                available--;
                 continue;
             }
 
             if (ch == '\r') {
                 frame.push_back(ch);
-		std::cout << frame; // should just print to std::out
+        		std::cout << frame; // should just print to std::out
                 frame.clear();
                 collecting = false;
-                available--;
                 continue;
             }
 
             if (ch == '\n') {
-                available--;
                 continue;
             }
 
             frame.push_back(ch);
-        } else {
-            std::this_thread::yield();
-        }
     }
 }
 
