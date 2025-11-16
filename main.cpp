@@ -92,6 +92,7 @@ void parser(std::vector<uint8_t> buffer, int available){
     std::string frame;
     frame.reserve(32);
     bool collecting = false;
+    std::cout << "this did in fact run..." << std::endl;
 
     while(available > 0){
             char ch = buffer.front();
