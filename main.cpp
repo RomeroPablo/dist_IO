@@ -299,8 +299,11 @@ void car_accept_thread(RingBuffer& ring_buffer){
         newHost = true;
         if(currentInstance.joinable()) currentInstance.join();
         newHost = false;
-        if(ret > 0)
+        if(ret >= 0){
+            int flags = fcntl(ret, F_GETFL, 0);
+            fcntl(ret, F_SETFL, flags | O_NONBLOCK);
             currentInstance = std::thread(car_reader, ret, std::ref(ring_buffer));
+        }
         ret = -1;
     }
     }catch(...){}
