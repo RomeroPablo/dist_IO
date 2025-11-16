@@ -16,6 +16,9 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 constexpr unsigned CLIENT_PORT = 8187;
 constexpr unsigned HOST_PORT = 5600;
@@ -80,10 +83,67 @@ void client_writer(int fd, RingBuffer& ring_buffer) {
             }
         }
     } catch (...) {
-        // Fall through to close socket.
     }
 
     ::close(fd);
+}
+
+void parser(std::vector<uint8_t> buffer, int available){
+    std::string frame;
+    frame.reserve(32);
+    bool collecting = false;
+
+    while(available > 0){
+        if(char* byte = (char*)buffer.front()){
+            char ch = static_cast<char>(*byte);
+            buffer.erase(buffer.begin());
+
+            if (ch == 't') {
+                frame.clear();
+                frame.push_back(ch);
+                collecting = true;
+                continue;
+            }
+
+            if (!collecting) {
+                continue;
+            }
+
+            if (ch == '\r') {
+                frame.push_back(ch);
+		std::cout << frame; // should just print to std::out
+                frame.clear();
+                collecting = false;
+                continue;
+            }
+
+            if (ch == '\n') {
+                continue;
+            }
+
+            frame.push_back(ch);
+        } else {
+            std::this_thread::yield();
+        }
+    }
+}
+
+void logger(RingBuffer& ring_buffer){
+	try{
+	auto reader = ring_buffer.create_reader();
+	std::vector<uint8_t> buffer(READ_CHUNK);
+	size_t available;
+	while(ring_buffer.is_running()){
+		std::size_t avail = reader.read_blocking(buffer.data(), buffer.size());
+		if(available == 0){
+			if(!ring_buffer.is_running()){
+				break;
+			}
+			continue;
+		}
+		parser(buffer, available);
+	}
+	} catch (...){}
 }
 
 void client_accept_thread(RingBuffer& ring_buffer) {
@@ -163,17 +223,35 @@ void heartbeat(RingBuffer& ring_buffer) {
     }
 }
 
-// what do we need?
-// a thread that just listens for new tcp connections on HOST_PORT
-// if it receives a new connection, kill the existing pull and push thread
-// create a new pull and push thread, connected to that port
-// p&p will now:
-// if the thread has not been killed:
-// read from the tcp port
-// push the contents to the ring buffer
 int host_fd= -1;
 std::atomic<bool> newHost = false;
 
+/*
+void car_reader(int fd, RingBuffer& ring_buffer) {
+    int log_fd = ::open("/var/log/daq_raw.bin",
+                        O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (log_fd < 0) return;
+
+    std::array<uint8_t, READ_CHUNK> buffer;
+
+    while (!newHost.load(std::memory_order_relaxed)) {
+
+        ssize_t n = ::read(fd, buffer.data(), buffer.size());
+        if (n <= 0) continue;
+
+//        auto t = std::chrono::steady_clock::now().time_since_epoch();
+//        uint64_t ts = std::chrono::duration_cast<std::chrono::nanoseconds>(t).count();
+
+//        ::write(log_fd, &ts, sizeof(ts));        // 8-byte timestamp
+        ::write(log_fd, &n,  sizeof(n));         // size of payload
+//        ::write(log_fd, buffer.data(), n);       // raw bytes
+
+        ring_buffer.write(buffer.data(), static_cast<size_t>(n));
+    }
+
+    ::close(log_fd);
+}
+*/
 void car_reader(int fd, RingBuffer& ring_buffer){
     try{
     std::array<uint8_t, READ_CHUNK> buffer;
@@ -181,6 +259,7 @@ void car_reader(int fd, RingBuffer& ring_buffer){
         size_t readSize = ::read(fd, buffer.data(), buffer.size());
         if(readSize > 0){
             ring_buffer.write(buffer.data(), readSize);
+	    //std::cout.write((const char*)buffer.data(), readSize);
         }
     }
     }catch(...){}
@@ -189,7 +268,7 @@ void car_reader(int fd, RingBuffer& ring_buffer){
 void car_accept_thread(RingBuffer& ring_buffer){
     try{
     std::thread currentInstance;
-    host_fd= create_listener(TEST_PORT);
+    host_fd= create_listener(HOST_PORT);
     while(1){
         int ret = ::accept(host_fd, nullptr, nullptr);
         if(ret < 0){
@@ -218,6 +297,9 @@ int main(int argc, char* argv[]) {
 
     std::thread car_thread(car_accept_thread, std::ref(ring_buffer));
     car_thread.detach();
+
+    std::thread loggThread(logger, std::ref(ring_buffer));
+    loggThread.detach();
 
     //std::thread heartbeat_thread(heartbeat, std::ref(ring_buffer));
     //heartbeat_thread.detach();
