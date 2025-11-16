@@ -102,10 +102,12 @@ void parser(std::vector<uint8_t> buffer, int available){
                 frame.clear();
                 frame.push_back(ch);
                 collecting = true;
+                available--;
                 continue;
             }
 
             if (!collecting) {
+                available--;
                 continue;
             }
 
@@ -114,10 +116,12 @@ void parser(std::vector<uint8_t> buffer, int available){
 		std::cout << frame; // should just print to std::out
                 frame.clear();
                 collecting = false;
+                available--;
                 continue;
             }
 
             if (ch == '\n') {
+                available--;
                 continue;
             }
 
