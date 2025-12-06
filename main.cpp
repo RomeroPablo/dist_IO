@@ -92,6 +92,18 @@ void parser(std::vector<uint8_t> buffer, int available){
     std::string frame;
     frame.reserve(32);
     bool collecting = false;
+    auto now = std::chrono::system_clock::now();
+    auto secs = std::chrono::time_point_cast<std::chrono::seconds>(now);
+    auto ms   = std::chrono::duration_cast<std::chrono::milliseconds>(now - secs).count();
+    std::time_t t = std::chrono::system_clock::to_time_t(secs);
+    std::tm tm = *std::localtime(&t);
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    char out[64];
+    std::snprintf(out, sizeof(out), "%s.%03lld", buf, (long long)ms);
+
+    std::cout << out << std::endl;
+
     while(available > 0){
             char ch = buffer.front();
             buffer.erase(buffer.begin());
